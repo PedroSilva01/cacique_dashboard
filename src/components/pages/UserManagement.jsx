@@ -72,18 +72,121 @@ const UserManagement = () => {
     }
   };
 
-  const handleDeleteUser = () => {
-     toast({
-      title: "🚧 Em Desenvolvimento",
-      description: "A exclusão de usuários será implementada em breve."
-    });
+  const handleDeleteUser = async (userId, userName) => {
+    if (!userId) return;
+    
+    // Confirmação antes de excluir
+    const confirmDelete = window.confirm(`Tem certeza que deseja excluir o usuário ${userName || ''}? Esta ação não pode ser desfeita.`);
+    
+    if (!confirmDelete) return;
+    
+    try {
+      setLoading(true);
+      
+      // Primeiro, verifica se o usuário está tentando excluir a si mesmo
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id === userId) {
+        throw new Error('Você não pode excluir sua própria conta aqui. Use as configurações do seu perfil.');
+      }
+      
+      // Exclui o perfil do usuário (isso acionará uma política RLS no Supabase)
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', userId);
+      
+      if (profileError) throw profileError;
+      
+      // Se chegou até aqui, a exclusão foi bem-sucedida
+      toast({
+        title: 'Usuário excluído',
+        description: `O usuário ${userName || ''} foi removido com sucesso.`,
+      });
+      
+      // Atualiza a lista de usuários
+      await fetchUsers();
+      
+    } catch (error) {
+      console.error('Erro ao excluir usuário:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao excluir usuário',
+        description: error.message || 'Ocorreu um erro ao tentar excluir o usuário.',
+      });
+    } finally {
+      setLoading(false);
+    }
   }
   
-  const handleInviteUser = () => {
-     toast({
-      title: "🚧 Em Desenvolvimento",
-      description: "O convite de novos usuários será implementado em breve."
-    });
+  const handleInviteUser = async () => {
+    const email = prompt('Digite o e-mail do usuário que deseja convidar:');
+    
+    if (!email) return;
+    
+    // Validação simples de e-mail
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast({
+        variant: 'destructive',
+        title: 'E-mail inválido',
+        description: 'Por favor, insira um endereço de e-mail válido.'
+      });
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      
+      // Primeiro, verifica se o e-mail já está em uso
+      const { data: existingUser } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .eq('email', email)
+        .single();
+      
+      if (existingUser) {
+        throw new Error('Já existe um usuário com este e-mail.');
+      }
+      
+      // Envia o convite via Supabase Auth
+      const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(email, {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        data: { invited_by: (await supabase.auth.getUser()).data.user?.id }
+      });
+      
+      if (inviteError) throw inviteError;
+      
+      // Cria um registro na tabela de perfis com papel padrão 'viewer'
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert([
+          { 
+            id: inviteData.user.id, 
+            email: email,
+            role: 'viewer',
+            full_name: email.split('@')[0] // Nome padrão baseado no e-mail
+          }
+        ]);
+      
+      if (profileError) throw profileError;
+      
+      toast({
+        title: 'Convite enviado!',
+        description: `Um convite foi enviado para ${email}. O usuário deve verificar o e-mail para criar uma senha.`,
+      });
+      
+      // Atualiza a lista de usuários
+      await fetchUsers();
+      
+    } catch (error) {
+      console.error('Erro ao enviar convite:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao enviar convite',
+        description: error.message || 'Ocorreu um erro ao enviar o convite. Tente novamente.',
+      });
+    } finally {
+      setLoading(false);
+    }
   }
 
   const getInitials = (name) => {
@@ -150,7 +253,11 @@ const UserManagement = () => {
                           <Users className="mr-2 h-4 w-4" />
                           <span>Tornar Viewer</span>
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={handleDeleteUser} className="text-destructive focus:text-destructive">
+                        <DropdownMenuItem 
+                          onClick={() => handleDeleteUser(user.id, user.full_name)} 
+                          className="text-destructive focus:text-destructive"
+                          disabled={user.role === 'owner'}
+                        >
                           <Trash2 className="mr-2 h-4 w-4" />
                           <span>Excluir Usuário</span>
                         </DropdownMenuItem>

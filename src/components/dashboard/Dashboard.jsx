@@ -46,27 +46,26 @@ const Dashboard = () => {
         // Continue with default values
       }
       
-      // Fetch Oil Price (WTI Crude)
-      const { data: oilData, error: oilError } = await fetch('https://api.oilpriceapi.com/v1/prices/latest?by_code=WTI_CRUDE_USD', {
-        headers: {
-          'Authorization': 'Token 09700042ce633b93720ab810a5f34b4b096e63be15eb05ea7e0e4c96f353f9ab',
-          'Content-Type': 'application/json'
-        }
-      });
-      
+      // Fetch Oil Price (WTI Crude) using Supabase function
       let oilPrice = 0;
       let oilChange = 0;
       
-      if (!oilError && oilData) {
-        const oilJson = await oilData.json();
-        if (oilJson.status === 'success') {
-          oilPrice = oilJson.data.price;
+      try {
+        const { data: oilData, error: oilError } = await supabase.functions.invoke('fetch-oil-price');
+        
+        if (oilError) {
+          console.error('Error fetching oil price:', oilError);
+        } else if (oilData?.data) {
+          oilPrice = oilData.data.price;
           // For demo purposes, we'll set a mock change value
           // In a real app, you would fetch historical data to calculate the actual change
           oilChange = 1.5; // Example change percentage
+          console.log('Oil price fetched successfully:', oilData.data);
+        } else {
+          console.warn('No price data in response:', oilData);
         }
-      } else {
-        console.error("Oil price fetch error:", oilError?.message || 'Unknown error');
+      } catch (error) {
+        console.error('Exception in oil price fetch:', error);
       }
 
       setKpiData({
@@ -156,7 +155,9 @@ const Dashboard = () => {
         />
         <KPICard 
           title="Petróleo (WTI)" 
-          value={`$${kpiData.oilPrice.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+          value={kpiData.oilPrice.value > 0 
+            ? `$${kpiData.oilPrice.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            : 'Carregando...'} 
           change={kpiData.oilPrice.change} 
           trend={kpiData.oilPrice.trend} 
           icon={Droplet} 

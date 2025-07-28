@@ -61,7 +61,18 @@ const Header = ({ setSidebarOpen }) => {
           console.error('Error fetching oil price:', oilError);
           setOilPrice(null);
         } else {
-          setOilPrice(oilData?.data?.price || null);
+          // A resposta da API está em oilData.data
+          if (oilData?.data) {
+            console.log('Oil price fetched successfully:', oilData.data);
+            setOilPrice({
+              price: oilData.data.price,
+              formatted: oilData.data.formatted,
+              currency: oilData.data.currency
+            });
+          } else {
+            console.warn('No price data in response:', oilData);
+            setOilPrice(null);
+          }
         }
       } catch (oilError) {
         console.error('Exception in oil price fetch:', oilError);
@@ -142,7 +153,9 @@ const Header = ({ setSidebarOpen }) => {
           {oilPrice && (
             <motion.div whileHover={{ scale: 1.05 }} className="hidden sm:flex items-center gap-2 bg-accent px-3 py-1.5 rounded-md">
               <Droplet className="h-4 w-4 text-gray-500" />
-              <span className="text-sm font-semibold text-foreground">${parseFloat(oilPrice).toFixed(2)}</span>
+              <span className="text-sm font-semibold text-foreground">
+                {oilPrice.formatted || `$${oilPrice.price?.toFixed(2) || '0.00'}`}
+              </span>
             </motion.div>
           )}
 
